@@ -80,6 +80,8 @@ import soundfile as sf
 from os.path import isfile, join
 from os import listdir, path, remove
 import os
+
+
 from pydub import AudioSegment
 import pychorus
 import pandas as pd
@@ -87,12 +89,19 @@ import matplotlib.pyplot as plt
 import pyloudnorm as pyln
 
 
+abspath = os.path.abspath(__file__)
+dname = os.path.dirname(abspath)
+os.chdir(dname)
+
+
 # 0-5
 
 NumJingle = 5
-include_upbeats = True
+include_upbeats = False
 tightness = 200
-bellvolume = 1  # higher values reduce volume of bells.
+bellvol_adj = 1  # higher values reduce volume of bells.  (1 - 4)
+
+
 
 
 '''
@@ -120,37 +129,51 @@ else: NumJingle = 5
 '''
 
 
-SONGS_PATH = "./Kringle/source files"
-PS_FILES_PATH = "./Kringle/output files"
-jingle_path = "./Kringle/SFX/jingle/"
-detection_mode = "bells"
+songs_path = dname + '/source files/'
+ps_files_path = dname + '/output files/'
+jingle_path = dname + '/SFX/jingle/'
+detection_mode = 'bells'
 
 # Get the song files from given dir
-song_files = [f for f in listdir(SONGS_PATH) if isfile(join(SONGS_PATH, f))]
+song_files = [f for f in listdir(songs_path) if isfile(join(songs_path, f))]
 
 # fetch the bells
 jingle = [j for j in sorted(listdir(jingle_path)) if isfile(join(jingle_path,j))]
-                
+      
+# fetch the horses
+clipclop, sr = librosa.load(dname +"/SFX/clipclop.wav", sr=44100)
+         
+
+# each sleighbell sound effect is ever so slightly off the beat
+# this finetunes the timing so they hit directly on downbeats
 finetune = [3,3,7,3,5,3]
 
 count = len(song_files)
 # Process each song file
 for i, song_file in enumerate(song_files):
     print(str(i+1) + "/" + str(count) + " Processing song: ", song_file)
-    song_file_path = SONGS_PATH + "/" + song_file
-    output_file = PS_FILES_PATH + "/" + song_file
+    song_file_path = songs_path + "/" + song_file
+    output_file = ps_files_path + "/" + song_file
 
     # Load file
     xy, sr = librosa.load(song_file_path, sr=44100)
     bell, sr = librosa.load(jingle_path + jingle[NumJingle], sr=None)
-    clipclop, sr = librosa.load("./Kringle/SFX/clipclop.wav", sr=44100)
+
 
     # calculate the average loudness of the track to help set jingle audio levels
     meter = pyln.Meter(sr) # create BS.1770 meter
     loudness = meter.integrated_loudness(xy) # measure loudness
-
-
-    print(loudness)
+    
+    # sloppy curve fitting to slightly adjust bell volume based on detected loudness
+    bellvol_adj = 4.02933 + (1.128807 - 4.02933)/(1 + (-loudness/15.20084)**22.80542)
+    
+    print("Average track loudness: " + str(round(loudness,1)) + " dB")
+    
+    meter = pyln.Meter(sr) # create BS.1770 meter
+    loudness = meter.integrated_loudness(bell) # measure loudness
+    
+    print("Bell loudness: " + str(round(loudness,1)) + " dB.  Adjusted loudness: " + str(round(meter.integrated_loudness(bell/bellvol_adj),1)) + " dB.")
+    
     
     """ 
         # Get the onset times
@@ -214,10 +237,10 @@ for i, song_file in enumerate(song_files):
             upbeat_times = librosa.frames_to_time(upbeat_frames)
             upbeat_clicks = librosa.clicks(frames=upbeat_frames, sr=sr, click = bell, length=len(xy))
             
-            mixed = xy + beat_clicks + upbeat_clicks
+            mixed = xy + (beat_clicks/bellvol_adj) + (upbeat_clicks/bellvol_adj)
         
         else:        
-            mixed = xy + beat_clicks/bellvolume
+            mixed = xy + (beat_clicks/bellvol_adj)
             #mixed = librosa.effects.remix(mixed, intervals[::-1])
 
         
@@ -278,7 +301,7 @@ for i, song_file in enumerate(song_files):
     librosa.display.waveplot(xy[:500000], alpha=0.6)#, ax=ax[0])
     plt.vlines(beat_times, -1, 1, color='r')
     plt.ylim(-1, 1)
-    plt.title('Tightness: ' + str(tightness))
+    plt.title(song_file + ' Tightness: ' + str(tightness))
     
     '''
     y, sr = librosa.load(librosa.ex('choice'), duration=10)
