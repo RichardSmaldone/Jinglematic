@@ -70,6 +70,18 @@ https://stackoverflow.com/questions/59544098/rhythm-detection-with-python
 https://github.com/csteinmetz1/pyloudnorm
 audio levelling
 
+https://github.com/vivjay30/pychorus
+pychorus
+
+pip install git+https://github.com/RichardSmaldone/pychorus@master
+
+
+necessary modules:
+    
+pip install pydub
+pip install pyloudnorm
+pip install git+https://github.com/steinbachr/pychorus
+
 
 
 """
@@ -83,7 +95,8 @@ import os
 
 
 from pydub import AudioSegment
-import pychorus
+import pychorus as pyc
+#from pychorus.helpers import find_and_output_chorus_nparray
 import pandas as pd
 import matplotlib.pyplot as plt
 import pyloudnorm as pyln
@@ -116,7 +129,7 @@ JingleInput = input("Select your jingle (1-6): ")
 
 print()
 print("Do you want to include jingles on the upbeats too?")
-print("It works best on songs withr very slow tempos.")
+print("It works best on songs with very slow tempos.")
 print("Default: no")
 UpbeatInput = input("(y)es  or (n)o: ")
 
@@ -141,8 +154,8 @@ song_files = [f for f in listdir(songs_path) if isfile(join(songs_path, f))]
 jingle = [j for j in sorted(listdir(jingle_path)) if isfile(join(jingle_path,j))]
       
 # fetch the horses
-clipclop, sr = librosa.load(dname +"/SFX/clipclop.wav", sr=44100)
-         
+clipclop, sr = librosa.load(dname +"/SFX/clipclop2.wav", sr=44100)
+churchbells, sr = librosa.load(dname +"/SFX/churchbells.wav", sr=44100)          
 
 # each sleighbell sound effect is ever so slightly off the beat
 # this finetunes the timing so they hit directly on downbeats
@@ -175,20 +188,53 @@ for i, song_file in enumerate(song_files):
     print("Bell loudness: " + str(round(loudness,1)) + " dB.  Adjusted loudness: " + str(round(meter.integrated_loudness(bell/bellvol_adj),1)) + " dB.")
     
     
-    """ 
-        # Get the onset times
-        onset_times = librosa.frames_to_time(onset_frames)
-        onset_clicks = librosa.clicks(frames=onset_frames, sr=sr3, click = bell2, length=len(xy))
     
-        # find tempo and beats
-        tempo, beat_frames = librosa.beat.beat_track(y=xy, sr=sr)
+    
+    # Find the best chorus time
+    #chorus_start_sec = pyc.find_and_output_chorus_nparray(xy, sr , output_file + "_chorus_np.wav", 15)
+    
+    #pyc.create_chroma()
+    #pyc.find_chorus(chroma, sr, song_length_sec, clip_length)
+    
+    
+    ## So since pychorus can only find one chorus per audio file
+    ## I could divide the audio files into half with np.split, and find the best chorus in first and second half
+    ## and add clipclops to both.  Or parameterize it into several splits.
+    
+    # take it apart
+    xy1, xy2 = np.array_split(xy,2)
+    
+    # put 'er back together
+    #xyc = np.concatenate((xy1,xy2))
+
+    chorus_start_1 = pyc.find_and_output_chorus_nparray(xy1, sr, output_file + "_chorus_1st half.wav", 10)
+    chorus_start_2 = pyc.find_and_output_chorus_nparray(xy2, sr, output_file + "_chorus_2nd half.wav", 10)
+    
+    
+    """
+    chorus 1 & 2
+    35.74421735030646
+    64.24673357131631
+    """
+    
+    """    
+    
+    xy1, xy2, xy3 = np.array_split(xy,3)
+    
+    chorus_start_sec = pyc.find_and_output_chorus_nparray(xy1, sr, output_file + "_chorus_1.wav", 10)
+    chorus_start_sec = pyc.find_and_output_chorus_nparray(xy2, sr, output_file + "_chorus_2.wav", 10)   
+    chorus_start_sec = pyc.find_and_output_chorus_nparray(xy3, sr, output_file + "_chorus_3.wav", 10)
+    
+    """
         
-        # Get the beat times
-        beat_times = librosa.frames_to_time(beat_frames)
-        beat_clicks = librosa.clicks(frames=beat_frames, sr=sr, click = bell, length=len(xy))
-        
-        # librosa.core.clicks(times=None, frames=None, sr=22050, hop_length=512, click_freq=1000.0, click_duration=0.1, click=None, length=None)
-        # bell must be a numpy.ndarray
+    """
+    "" and fourths
+    xy1, xy2, xy3,xy4 = np.split(xy,4)
+    
+    chorus_start_sec = pyc.find_and_output_chorus_nparray(xy1, sr, output_file + "_chorus_1.wav", 10)
+    chorus_start_sec = pyc.find_and_output_chorus_nparray(xy2, sr, output_file + "_chorus_2.wav", 10)   
+    chorus_start_sec = pyc.find_and_output_chorus_nparray(xy3, sr, output_file + "_chorus_3.wav", 10)
+    chorus_start_sec = pyc.find_and_output_chorus_nparray(xy4, sr, output_file + "_chorus_4.wav", 10)
     """
 
     # Generate a txt file which is contains times, and create a audio file with click effect.
@@ -216,12 +262,44 @@ for i, song_file in enumerate(song_files):
         beat_frames = beat_frames - finetune[NumJingle]
         
         # delete any that are less than zero after shifting
-        mask = beat_frames > 0
-        beat_frames = beat_frames[mask]
+        beat_frames = beat_frames[beat_frames > 0]
         
         # Get the beat times and create click track
         beat_times = librosa.frames_to_time(beat_frames)
+        
+        
+        chorus1_start_frame = librosa.time_to_frames(chorus_start_1,sr)
+
+        clipclop_frames = beat_frames[beat_frames > chorus1_start]      
+        
+        # limit it to 32 clipclops
+        clipclop_frames = clipclop_frames[clipclop_frames < clipclop_frames[32]]
+        
+        # build the clipclop track (with slight frame adjustment)
+        clip_clops = librosa.clicks(frames=clipclop_frames+3, sr=sr, click = clipclop, length=len(xy))
+
+        # drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
+        
+        indices = [0,15]
+              
+        church_bells = librosa.clicks(frames=np.take(clipclop_frames, indices), sr=sr, click = churchbells, length=len(xy))
+
+
+        # pull the bells out where clipclops exist. 
+        beat_frames = [i for i in beat_frames if i not in clipclop_frames]
+        
+        # make the jingle track
         beat_clicks = librosa.clicks(frames=beat_frames, sr=sr, click = bell, length=len(xy))
+
+        #chorus2_start_frame = librosa.time_to_frames(chorus_start_2,sr)
+        #chorus2_end_frame = 
+
+        # we have the times of the two best choruses in the 1st & 2nd halfs
+        # delete from beat_clicks where frames between start and end
+        # then for the clipclop track
+        # delete from clip_clop where frames NOT between start and end
+
+
 
  
         #if tempo <=105: 
@@ -240,8 +318,9 @@ for i, song_file in enumerate(song_files):
             mixed = xy + (beat_clicks/bellvol_adj) + (upbeat_clicks/bellvol_adj)
         
         else:        
-            mixed = xy + (beat_clicks/bellvol_adj)
-            #mixed = librosa.effects.remix(mixed, intervals[::-1])
+            mixed = xy + (beat_clicks/bellvol_adj) + clip_clops +  church_bells
+            
+           
 
         
         sf.write(output_file + ".wav", mixed, sr)
