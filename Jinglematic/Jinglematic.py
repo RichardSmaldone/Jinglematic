@@ -182,8 +182,8 @@ for i, song_file in enumerate(song_files):
     # default key of C    
     # pitches[0] is C   
     
-    clipclop1 = librosa.effects.pitch_shift(clipclop1, sr, n_steps=adj_key, bins_per_octave=24) 
-    clipclop2 = librosa.effects.pitch_shift(clipclop2, sr, n_steps=adj_key, bins_per_octave=24) 
+    #clipclop1 = librosa.effects.pitch_shift(clipclop1, sr, n_steps=adj_key, bins_per_octave=24) 
+    #clipclop2 = librosa.effects.pitch_shift(clipclop2, sr, n_steps=adj_key, bins_per_octave=24) 
     
     
     
@@ -314,24 +314,20 @@ for i, song_file in enumerate(song_files):
         
         # build the clipclop track (with slight frame adjustment for timing)
         clip_clops = librosa.clicks(frames=clipclop_frames, sr=sr, click = clipclop1, length=len(xy))
-        sf.write(output_file + "clops.wav", clip_clops, sr)
-        
+              
         clip_upclops = librosa.clicks(frames=clipclop_upbeat_frames, sr=sr, click = clipclop2, length=len(xy))
-        sf.write(output_file + "clops_up.wav", clip_upclops, sr)
-
 
         clip_clops = clip_clops + clip_upclops
-        sf.write(output_file + "clops_combined.wav", clip_upclops, sr)
+
         
         # let's drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
         
         harp_indices = [0,15]
-        whip_indices = [5,21]
+        whip_indices = [6,22]
               
         church_bells = librosa.clicks(frames=np.take(clipclop_frames, harp_indices), sr=sr, click = harp, length=len(xy))
 
         whip_sound = librosa.clicks(frames=np.take(clipclop_frames, whip_indices), sr=sr, click = whip, length=len(xy))
-
 
         # pull the jingles out where clipclops exist. 
         beat_frames = np.array([i for i in beat_frames if i not in clipclop_frames])
@@ -365,7 +361,7 @@ for i, song_file in enumerate(song_files):
             # let's drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
         
             harp_indices = [0,15]
-            whip_indices = [5,21]
+            whip_indices = [6,22]
               
             church_bells = librosa.clicks(frames=np.take(clipclop_frames2, harp_indices), sr=sr, click = harp, length=len(xy))
             whip_sound = librosa.clicks(frames=np.take(clipclop_frames, whip_indices), sr=sr, click = whip, length=len(xy))
