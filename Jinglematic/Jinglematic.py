@@ -99,6 +99,8 @@ jingle = [j for j in sorted(listdir(jingle_path)) if isfile(join(jingle_path,j))
 # fetch the horses
 clipclop1, sr = librosa.load(dname +"/SFX/woodblock1.wav", sr=44100)
 clipclop2, sr = librosa.load(dname +"/SFX/woodblock2.wav", sr=44100)
+harp, sr = librosa.load(dname +"/SFX/harp.wav", sr=44100)
+whip, sr = librosa.load(dname +"/SFX/whip.wav", sr=44100)
 
 # each sleighbell sound effect is ever so slightly off the beat
 # this finetunes the timing so they hit directly on downbeats
@@ -113,8 +115,8 @@ for i, song_file in enumerate(song_files):
 
     # Load file
     xy, sr = librosa.load(song_file_path, sr=44100)
-    bell, sr = librosa.load(jingle_path + jingle[NumJingle], sr=None)
-
+    bell, sr = librosa.load(jingle_path + jingle[NumJingle], sr=44100)
+    
 
     # calculate the average loudness of the track to help set jingle audio levels
     meter = pyln.Meter(sr) # create BS.1770 meter
@@ -174,7 +176,17 @@ for i, song_file in enumerate(song_files):
     
     if third == 'minor':
         print(str.format('Adjusted to {} major',pitches[adj_key]))
+    
         
+    # shift the pitch of the woodblocks so they're in key
+    # default key of C    
+    # pitches[0] is C   
+    
+    clipclop1 = librosa.effects.pitch_shift(clipclop1, sr, n_steps=adj_key, bins_per_octave=24) 
+    clipclop2 = librosa.effects.pitch_shift(clipclop2, sr, n_steps=adj_key, bins_per_octave=24) 
+    
+    
+    
     # librosa has a pitch shift function, save yourself some time
     #y_shifted = librosa.effects.pitch_shift(y, sr, n_steps=4, bins_per_octave=24)   
     churchbells, sr = librosa.load(dname +'/SFX//churchbells//churchbells_' + songkey + '.wav', sr=44100)  
@@ -182,8 +194,9 @@ for i, song_file in enumerate(song_files):
     # be cool if you could get bell bing-bongs on the beat
     # also change the horse clops into temple blocks and subdivided between beats
     
-    bell = librosa.effects.pitch_shift(bell, sr, n_steps=-4, bins_per_octave=24)   
+    #bell = librosa.effects.pitch_shift(bell, sr, n_steps=-4, bins_per_octave=24)   
     
+
     # Find the best chorus time
     # chorus_start_sec_0 = pyc.find_and_output_chorus_nparray(xy, sr , None, 15)
     
@@ -210,6 +223,8 @@ for i, song_file in enumerate(song_files):
         chorus_start_1 = pyc.find_and_output_chorus_nparray(xy, sr , None, 15)
     else:
         chorus_start_2 = pyc.find_and_output_chorus_nparray(xy2, sr, None, 10)
+        if chorus_start_2 != None:
+                chorus_start_2 = chorus_start_2 + librosa.get_duration(xy1)
     
     # if there's no chorus found at all, let's just pretend it's at the halfway mark.
     if chorus_start_1 is None:
@@ -273,15 +288,20 @@ for i, song_file in enumerate(song_files):
         if tempo <= 100: 
            include_upbeats = True
            print("BPM <= 100, adding jingles on the upbeat")
-           
+          
+        
         if include_upbeats == True:
             upbeat_frames = (beat_frames[1:] + beat_frames[:-1]) / 2
-            beat_frames = np.concatenate((beat_frames,upbeat_frames))
+            beat_frames = np.sort(np.concatenate((beat_frames,upbeat_frames)))
+        
+     
+        
         
         # Get the beat times and create click track
         beat_times = librosa.frames_to_time(beat_frames)
         
-        # get frame start for chorus to add clipclops 
+        # get frame start for chorus to add clipclops
+        librosa.time_to_frames(chorus_start_1, sr, hop_length=1024, n_fft=None)
         chorus1_start_frame = librosa.time_to_frames(chorus_start_1,sr)
         clipclop_frames = beat_frames[beat_frames > chorus1_start_frame]      
         
@@ -293,40 +313,67 @@ for i, song_file in enumerate(song_files):
         
         
         # build the clipclop track (with slight frame adjustment for timing)
-        clip_clops = librosa.clicks(frames=clipclop_frames+3, sr=sr, click = clipclop1, length=len(xy))
-        clip_clops2 = librosa.clicks(frames=clipclop_frames+3, sr=sr, click = clipclop2, length=len(xy))
+        clip_clops = librosa.clicks(frames=clipclop_frames, sr=sr, click = clipclop1, length=len(xy))
+        sf.write(output_file + "clops.wav", clip_clops, sr)
+        
+        clip_upclops = librosa.clicks(frames=clipclop_upbeat_frames, sr=sr, click = clipclop2, length=len(xy))
+        sf.write(output_file + "clops_up.wav", clip_upclops, sr)
 
-        clip_clops = clip_clops + clip_clops2
 
+        clip_clops = clip_clops + clip_upclops
+        sf.write(output_file + "clops_combined.wav", clip_upclops, sr)
+        
         # let's drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
         
-        indices = [0,15]
+        harp_indices = [0,15]
+        whip_indices = [5,21]
               
-        church_bells = librosa.clicks(frames=np.take(clipclop_frames, indices), sr=sr, click = churchbells, length=len(xy))
+        church_bells = librosa.clicks(frames=np.take(clipclop_frames, harp_indices), sr=sr, click = harp, length=len(xy))
+
+        whip_sound = librosa.clicks(frames=np.take(clipclop_frames, whip_indices), sr=sr, click = whip, length=len(xy))
+
 
         # pull the jingles out where clipclops exist. 
         beat_frames = np.array([i for i in beat_frames if i not in clipclop_frames])
 
-              
+  
         # Drop in a second chorus if it exists
         if chorus_start_2 != None:
             # get frame start for chorus to add clipclops 
-            chorus2_start_frame = librosa.time_to_frames(chorus_start_2,sr)
-            clipclop_frames2 = beat_frames[beat_frames > chorus2_start_frame]      
-        
+            chorus2_start_frame = librosa.time_to_frames(chorus_start_2,sr,1024)
+            clipclop_frames2 = beat_frames[beat_frames > chorus2_start_frame]  
+            
+            # librosa.time_to_frames(chorus_start_1, sr, hop_length=512, n_fft=None)
+            # could be the hop length borking it
+            
             # limit it to 32 clipclops
             clipclop_frames2 = clipclop_frames2[clipclop_frames2 < clipclop_frames2[32]]
         
+            # and upbeats for a different clop sound
+            clipclop_upbeat_frames2 = (clipclop_frames2[1:] + clipclop_frames2[:-1]) / 2
+        
+        
             # build the clipclop track (with slight frame adjustment for timing)
-            clip_clops2 = librosa.clicks(frames=clipclop_frames+3, sr=sr, click = clipclop, length=len(xy))
+            clip_clops2 = librosa.clicks(frames=clipclop_frames2, sr=sr, click = clipclop1, length=len(xy))
+            clip_upclops2 = librosa.clicks(frames=clipclop_upbeat_frames2, sr=sr, click = clipclop2, length=len(xy))
+
+            clip_clops2 = clip_clops2 + clip_upclops2        
+        
+            # build the clipclop track (with slight frame adjustment for timing)
+            clip_clops = clip_clops + clip_clops2
 
             # let's drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
         
-            indices = [0,15]
+            harp_indices = [0,15]
+            whip_indices = [5,21]
               
-            church_bells = librosa.clicks(frames=np.take(clipclop_frames, indices), sr=sr, click = churchbells, length=len(xy))
-           
-    
+            church_bells = librosa.clicks(frames=np.take(clipclop_frames2, harp_indices), sr=sr, click = harp, length=len(xy))
+            whip_sound = librosa.clicks(frames=np.take(clipclop_frames, whip_indices), sr=sr, click = whip, length=len(xy))
+
+
+            # pull the jingles out where clipclops exist. 
+            beat_frames = np.array([i for i in beat_frames if i not in clipclop_frames2])
+
         # make the jingle track
         beat_clicks = librosa.clicks(frames=beat_frames, sr=sr, click = bell, length=len(xy))
 
@@ -351,7 +398,7 @@ for i, song_file in enumerate(song_files):
         """      
             
         # else:        
-        mixed = xy + (beat_clicks/bellvol_adj) + clip_clops +  (church_bells/(bellvol_adj*2))
+        mixed = xy + (beat_clicks / bellvol_adj) +(clip_clops / (bellvol_adj * 2)) +  (church_bells / (bellvol_adj * 2)) + (whip_sound / bellvol_adj)
             
            
 
