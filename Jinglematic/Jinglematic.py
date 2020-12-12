@@ -23,6 +23,8 @@ pip install git+https://github.com/RichardSmaldone/pychorus@master
 
 required modules:
     
+pip install librosa
+pip install soundfile    
 pip install pydub
 pip install pyloudnorm
 pip install git+https://github.com/RichardSmaldone/pychorus
@@ -43,6 +45,8 @@ import pychorus as pyc
 import pandas as pd
 import matplotlib.pyplot as plt
 import pyloudnorm as pyln
+import random as rnd
+
 
 
 abspath = os.path.abspath(__file__)
@@ -56,7 +60,7 @@ NumJingle = 5
 include_upbeats = False
 tightness = 200
 bellvol_adj = 1  # higher values reduce volume of bells.  (1 - 4)
-
+rnd.seed()
 
 
 
@@ -101,6 +105,10 @@ clipclop1, sr = librosa.load(dname +"/SFX/woodblock1.wav", sr=44100)
 clipclop2, sr = librosa.load(dname +"/SFX/woodblock2.wav", sr=44100)
 harp, sr = librosa.load(dname +"/SFX/harp.wav", sr=44100)
 whip, sr = librosa.load(dname +"/SFX/whip.wav", sr=44100)
+hoho1, sr = librosa.load(dname +"/SFX/ho_01.wav", sr=44100)
+hoho2, sr = librosa.load(dname +"/SFX/ho_02.wav", sr=44100)
+hoho3, sr = librosa.load(dname +"/SFX/ho_03.wav", sr=44100)
+
 
 # each sleighbell sound effect is ever so slightly off the beat
 # this finetunes the timing so they hit directly on downbeats
@@ -260,195 +268,161 @@ for i, song_file in enumerate(song_files):
 
     # Generate a txt file which is contains times, and create a audio file with click effect.
     print("Adding festive holiday cheer...")
-    if detection_mode == "only-onsets":
-        
-        # Find onsets
-        onset_frames = librosa.onset.onset_detect(xy, sr=sr, wait=1, pre_avg=1, post_avg=1, pre_max=1, post_max=1)
-    
-        # Get the onset times
-        onset_times = librosa.frames_to_time(onset_frames)
-        onset_clicks = librosa.clicks(frames=onset_frames, sr=sr3, click = bell2, length=len(xy))
-        sf.write(output_file + "_onset_clicks.wav", xy + onset_clicks, sr)
-            
-        #librosa.output.write_wav(output_file + " - onset_clicks.wav", xy + onset_clicks, sr)
-        file = open(output_file + "_onset_times.txt","ab")
-        np.savetxt(file, onset_times, '%.2f') 
-        
-    elif detection_mode == "bells":
-        
-        # find tempo and beats
-        tempo, beat_frames = librosa.beat.beat_track(y=xy, sr=sr, tightness=tightness, trim=True)
 
-        # tweaking the beatmap just a pinch so the jingles land right on the beats
-        beat_frames = beat_frames - finetune[NumJingle]
-  
-        # delete any that are less than zero after shifting
-        beat_frames = beat_frames[beat_frames > 0]
-      
-        if tempo <= 100: 
-           include_upbeats = True
-           print("BPM <= 100, adding jingles on the upbeat")
-          
         
-        if include_upbeats == True:
-            upbeat_frames = (beat_frames[1:] + beat_frames[:-1]) / 2
-            beat_frames = np.sort(np.concatenate((beat_frames,upbeat_frames)))
-        
+    # find tempo and beats
+    tempo, beat_frames = librosa.beat.beat_track(y=xy, sr=sr, tightness=tightness, trim=True)
+    
+    # tweaking the beatmap just a pinch so the jingles land right on the beats
+    beat_frames = beat_frames - finetune[NumJingle]
      
-        
-        
-        # Get the beat times and create click track
-        beat_times = librosa.frames_to_time(beat_frames)
-        
-        # get frame start for chorus to add clipclops
-        librosa.time_to_frames(chorus_start_1, sr, hop_length=1024, n_fft=None)
-        chorus1_start_frame = librosa.time_to_frames(chorus_start_1,sr)
-        clipclop_frames = beat_frames[beat_frames > chorus1_start_frame]      
+    # delete any that are less than zero after shifting
+    beat_frames = beat_frames[beat_frames > 0]
+      
+    if tempo <= 100: 
+       include_upbeats = True
+       print("BPM <= 100, adding jingles on the upbeat")
+             
+    if include_upbeats == True:
+        upbeat_frames = (beat_frames[1:] + beat_frames[:-1]) / 2
+        beat_frames = np.sort(np.concatenate((beat_frames,upbeat_frames)))
+           
+    
+    # Get the beat times and create click track
+    beat_times = librosa.frames_to_time(beat_frames)
+    
+    # get frame start for chorus
+    librosa.time_to_frames(chorus_start_1, sr, hop_length=1024, n_fft=None)
+    chorus1_start_frame = librosa.time_to_frames(chorus_start_1,sr)
+    
+    # add clipclops
+    clipclop_frames = beat_frames[beat_frames > chorus1_start_frame]      
+    
+    # limit it to 32 clipclops
+    clipclop_frames = clipclop_frames[clipclop_frames < clipclop_frames[32]]
+    
+    # and upbeats for a different clop sound
+    clipclop_upbeat_frames = (clipclop_frames[1:] + clipclop_frames[:-1]) / 2
+    # adding a second upbeat to emulate a horse cadence
+    clipclop_quarter_frames = clipclop_upbeat_frames[:-1] + np.diff(clipclop_upbeat_frames)/4        
+    clipclop_quarter_frames = np.concatenate((clipclop_quarter_frames[:8],clipclop_quarter_frames[20:28]))
+   
+    clipclop_upbeat_frames = np.sort(np.concatenate((clipclop_upbeat_frames,clipclop_quarter_frames)))
+   
+    # ok well the quarter clop is in the wrong place.
+   
+    
+    # build the clipclop track (with slight frame adjustment for timing)
+    clip_clops = librosa.clicks(frames=clipclop_frames, sr=sr, click = clipclop1, length=len(xy))
+          
+    clip_upclops = librosa.clicks(frames=clipclop_upbeat_frames, sr=sr, click = clipclop2, length=len(xy))
+   
+    clip_clops = clip_clops + clip_upclops
+   
+    
+    # let's drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
+    # random hoho preceding chorus
+    hoho = eval("hoho" + str(rnd.randint(1,3)))       
+    harp_indices = [0,28]
+    whip_indices = [6,12,20]
+    
+    harp_sound = librosa.clicks(frames=np.take(clipclop_frames, harp_indices), sr=sr, click = harp, length=len(xy))
+    whip_sound = librosa.clicks(frames=np.take(clipclop_frames, whip_indices), sr=sr, click = whip, length=len(xy))
+    hoho_sound = librosa.clicks(frames=librosa.time_to_frames(chorus_start_1-1,sr), sr=sr, click = hoho, length=len(xy))
+   
+    # pull the jingles out where clipclops exist. 
+    beat_frames = np.array([i for i in beat_frames if i not in clipclop_frames])
+   
+     
+    # Drop in a second chorus if it exists
+    if chorus_start_2 != None:
+        # get frame start for chorus to add clipclops 
+        chorus2_start_frame = librosa.time_to_frames(chorus_start_2,sr,1024)
+        clipclop_frames2 = beat_frames[beat_frames > chorus2_start_frame]  
         
         # limit it to 32 clipclops
-        clipclop_frames = clipclop_frames[clipclop_frames < clipclop_frames[32]]
-        
+        clipclop_frames2 = clipclop_frames2[clipclop_frames2 < clipclop_frames2[32]]
+    
         # and upbeats for a different clop sound
-        clipclop_upbeat_frames = (clipclop_frames[1:] + clipclop_frames[:-1]) / 2
-        
-        
+        clipclop_upbeat_frames2 = (clipclop_frames2[1:] + clipclop_frames2[:-1]) / 2
+        # adding a second upbeat to emulate a horse cadence
+        clipclop_quarter_frames2 = clipclop_upbeat_frames2[:-1] + np.diff(clipclop_upbeat_frames2)/4     
+        clipclop_quarter_frames2 = np.concatenate((clipclop_quarter_frames2[:8],clipclop_quarter_frames2[20:28]))
+   
+        clipclop_upbeat_frames2 = np.sort(np.concatenate((clipclop_upbeat_frames2,clipclop_quarter_frames2)))
+   
+    
         # build the clipclop track (with slight frame adjustment for timing)
-        clip_clops = librosa.clicks(frames=clipclop_frames, sr=sr, click = clipclop1, length=len(xy))
-              
-        clip_upclops = librosa.clicks(frames=clipclop_upbeat_frames, sr=sr, click = clipclop2, length=len(xy))
-
-        clip_clops = clip_clops + clip_upclops
-
-        
+        clip_clops2 = librosa.clicks(frames=clipclop_frames2, sr=sr, click = clipclop1, length=len(xy))
+        clip_upclops2 = librosa.clicks(frames=clipclop_upbeat_frames2, sr=sr, click = clipclop2, length=len(xy))
+   
+        clip_clops2 = clip_clops2 + clip_upclops2        
+    
+        # build the clipclop track (with slight frame adjustment for timing)
+        clip_clops = clip_clops + clip_clops2
+   
         # let's drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
-        
-        harp_indices = [0,15]
-        whip_indices = [6,22]
-              
-        church_bells = librosa.clicks(frames=np.take(clipclop_frames, harp_indices), sr=sr, click = harp, length=len(xy))
-
-        whip_sound = librosa.clicks(frames=np.take(clipclop_frames, whip_indices), sr=sr, click = whip, length=len(xy))
-
+        # random hoho preceding chorus
+        hoho = eval("hoho" + str(rnd.randint(1,3)))        
+        harp_indices = [0,28]
+        whip_indices = [6,12,20]
+          
+        harp_sound = harp_sound + librosa.clicks(frames=np.take(clipclop_frames2, harp_indices), sr=sr, click = harp, length=len(xy))
+        whip_sound = whip_sound + librosa.clicks(frames=np.take(clipclop_frames2, whip_indices), sr=sr, click = whip, length=len(xy))
+        hoho_sound = hoho_sound + librosa.clicks(frames=librosa.time_to_frames(chorus_start_2-1), sr=sr, click = hoho, length=len(xy))
+   
         # pull the jingles out where clipclops exist. 
-        beat_frames = np.array([i for i in beat_frames if i not in clipclop_frames])
-
+        beat_frames = np.array([i for i in beat_frames if i not in clipclop_frames2])
+   
+    # make the jingle track
+    beat_clicks = librosa.clicks(frames=beat_frames, sr=sr, click = bell, length=len(xy))
+   
+    # we have the times of the two best choruses in the 1st & 2nd halfs
+    # delete from beat_clicks where frames between start and end
+    # then for the clipclop track
+    # delete from clip_clop where frames NOT between start and end
+   
+   
+       
+    """
+    if include_upbeats == True:
+        
+        # half the distance between each detected beat
+        upbeat_frames = (beat_frames[1:] + beat_frames[:-1]) / 2
+   
+        # Get the upbeat times and create click track
+        upbeat_times = librosa.frames_to_time(upbeat_frames)
+        upbeat_clicks = librosa.clicks(frames=upbeat_frames, sr=sr, click = bell, length=len(xy))
+        
+        mixed = xy + (beat_clicks/bellvol_adj) + (upbeat_clicks/bellvol_adj)
+    """      
+        
+    # else:        
+    mixed = xy + (
+            beat_clicks / bellvol_adj) + (
+            clip_clops / (bellvol_adj * 2)) +  (
+            harp_sound / (bellvol_adj*2)) + (
+            whip_sound / bellvol_adj) + (
+            hoho_sound/ bellvol_adj)
+        
+       
+   
+    
+    sf.write(output_file + ".wav", mixed, sr)
+    AudioSegment.from_wav(output_file + ".wav").export(output_file + "_jingled.mp3", bitrate="192k", format="mp3") #
+    #file = open(output_file + "_beat_times.txt","ab")
+    #np.savetxt(file, beat_times, '%.2f')       
+    os.remove(output_file + ".wav")
+   
+    # ipd.display.Audio(filename=output_file + "_jingled.mp3",)
+   
+   
+    #print(beat_times)
+    print("Tempo: " + str(round(tempo)) + " bpm.")
+    # calculate the upbeats by returning exactly half the distance between each beat
+    # easy enough???
   
-        # Drop in a second chorus if it exists
-        if chorus_start_2 != None:
-            # get frame start for chorus to add clipclops 
-            chorus2_start_frame = librosa.time_to_frames(chorus_start_2,sr,1024)
-            clipclop_frames2 = beat_frames[beat_frames > chorus2_start_frame]  
-            
-            # librosa.time_to_frames(chorus_start_1, sr, hop_length=512, n_fft=None)
-            # could be the hop length borking it
-            
-            # limit it to 32 clipclops
-            clipclop_frames2 = clipclop_frames2[clipclop_frames2 < clipclop_frames2[32]]
-        
-            # and upbeats for a different clop sound
-            clipclop_upbeat_frames2 = (clipclop_frames2[1:] + clipclop_frames2[:-1]) / 2
-        
-        
-            # build the clipclop track (with slight frame adjustment for timing)
-            clip_clops2 = librosa.clicks(frames=clipclop_frames2, sr=sr, click = clipclop1, length=len(xy))
-            clip_upclops2 = librosa.clicks(frames=clipclop_upbeat_frames2, sr=sr, click = clipclop2, length=len(xy))
-
-            clip_clops2 = clip_clops2 + clip_upclops2        
-        
-            # build the clipclop track (with slight frame adjustment for timing)
-            clip_clops = clip_clops + clip_clops2
-
-            # let's drop in some churchbells to keep the horses company on the 1st and 16th beat of the chorus
-        
-            harp_indices = [0,15]
-            whip_indices = [6,22]
-              
-            church_bells = librosa.clicks(frames=np.take(clipclop_frames2, harp_indices), sr=sr, click = harp, length=len(xy))
-            whip_sound = librosa.clicks(frames=np.take(clipclop_frames, whip_indices), sr=sr, click = whip, length=len(xy))
-
-
-            # pull the jingles out where clipclops exist. 
-            beat_frames = np.array([i for i in beat_frames if i not in clipclop_frames2])
-
-        # make the jingle track
-        beat_clicks = librosa.clicks(frames=beat_frames, sr=sr, click = bell, length=len(xy))
-
-        # we have the times of the two best choruses in the 1st & 2nd halfs
-        # delete from beat_clicks where frames between start and end
-        # then for the clipclop track
-        # delete from clip_clop where frames NOT between start and end
-
-
-           
-        """
-        if include_upbeats == True:
-            
-            # half the distance between each detected beat
-            upbeat_frames = (beat_frames[1:] + beat_frames[:-1]) / 2
-
-            # Get the upbeat times and create click track
-            upbeat_times = librosa.frames_to_time(upbeat_frames)
-            upbeat_clicks = librosa.clicks(frames=upbeat_frames, sr=sr, click = bell, length=len(xy))
-            
-            mixed = xy + (beat_clicks/bellvol_adj) + (upbeat_clicks/bellvol_adj)
-        """      
-            
-        # else:        
-        mixed = xy + (beat_clicks / bellvol_adj) +(clip_clops / (bellvol_adj * 2)) +  (church_bells / (bellvol_adj * 2)) + (whip_sound / bellvol_adj)
-            
-           
-
-        
-        sf.write(output_file + ".wav", mixed, sr)
-        AudioSegment.from_wav(output_file + ".wav").export(output_file + "_jingled.mp3", bitrate="192k", format="mp3") #
-        #file = open(output_file + "_beat_times.txt","ab")
-        #np.savetxt(file, beat_times, '%.2f')       
-        os.remove(output_file + ".wav")
-
-       # ipd.display.Audio(filename=output_file + "_jingled.mp3",)
-
-
-        #print(beat_times)
-        print("Tempo: " + str(round(tempo)) + " bpm.")
-        # calculate the upbeats by returning exactly half the distance between each beat
-        # easy enough???
-        
-    elif detection_mode == "sleigh":
-        
-        # find tempo and beats
-        tempo, beat_frames = librosa.beat.beat_track(y=xy, sr=sr)
     
-        # Get the beat times
-        beat_times = librosa.frames_to_time(beat_frames)
-        
-        beat_clicks = librosa.clicks(frames=beat_frames, sr=sr, click = clipclop, length=len(xy))
-        
-        mixed = xy + beat_clicks # combine audio with click track
-        sf.write(output_file + ".wav", mixed, sr)
-        AudioSegment.from_wav(output_file + ".wav").export(output_file + "_sleigh_ride.mp3", bitrate="192k", format="mp3") #
-        #file = open(output_file + "_beat_times.txt","ab")
-        #np.savetxt(file, beat_times, '%.2f')       
-        os.remove(output_file + ".wav")
-        
-    else:
-        
-        # Get the onset times
-        onset_times = librosa.frames_to_time(onset_frames)
-        onset_clicks = librosa.clicks(frames=onset_frames, sr=sr, click = bell, length=len(xy))
-
-        # find tempo and beats
-        tempo, beat_frames = librosa.beat.beat_track(y=xy, sr=sr)
-    
-        # Get the beat times
-        beat_times = librosa.frames_to_time(beat_frames)
-        beat_clicks = librosa.clicks(frames=beat_frames, sr=sr, click = clipclop, length=len(xy))
-    
-        mixed = xy + beat_clicks + onset_clicks # combine audio with click track
-        sf.write(output_file + ".wav", mixed, sr)
-        AudioSegment.from_wav(output_file + ".wav").export(output_file + "_full_clicks.mp3", bitrate="192k", format="mp3") #
-        #file = open(output_file + "_beat_times.txt","ab")
-        #np.savetxt(file, beat_times, '%.2f')       
-        os.remove(output_file + ".wav") 
    
     
     # check beat detection in the middle of the song 
