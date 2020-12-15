@@ -92,7 +92,6 @@ else: NumJingle = 5
 songs_path = dname + '/source files/'
 ps_files_path = dname + '/output files/'
 jingle_path = dname + '/SFX/jingle/'
-detection_mode = 'bells'
 
 # Get the song files from given dir
 song_files = [f for f in listdir(songs_path) if isfile(join(songs_path, f))]
@@ -124,7 +123,7 @@ for i, song_file in enumerate(song_files):
     # Load file
     xy, sr = librosa.load(song_file_path, sr=44100)
     bell, sr = librosa.load(jingle_path + jingle[NumJingle], sr=44100)
-    
+    sleighbell, sr = librosa.load(jingle_path + jingle[2], sr=44100)
 
     # calculate the average loudness of the track to help set jingle audio levels
     meter = pyln.Meter(sr) # create BS.1770 meter
@@ -309,7 +308,10 @@ for i, song_file in enumerate(song_files):
    
     clipclop_upbeat_frames = np.sort(np.concatenate((clipclop_upbeat_frames,clipclop_quarter_frames)))
    
-    # ok well the quarter clop is in the wrong place.
+
+    # add some jingle to the chorus downbeats.
+    # numpy gets sassy with mismatched array sizes, fill the short one with 0s
+    clipclop1 = clipclop1 + np.concatenate((sleighbell,np.zeros(len(clipclop1)-len(sleighbell))))
    
     
     # build the clipclop track (with slight frame adjustment for timing)
@@ -350,6 +352,10 @@ for i, song_file in enumerate(song_files):
         clipclop_quarter_frames2 = np.concatenate((clipclop_quarter_frames2[:8],clipclop_quarter_frames2[20:28]))
    
         clipclop_upbeat_frames2 = np.sort(np.concatenate((clipclop_upbeat_frames2,clipclop_quarter_frames2)))
+   
+    
+    
+    
    
     
         # build the clipclop track (with slight frame adjustment for timing)
