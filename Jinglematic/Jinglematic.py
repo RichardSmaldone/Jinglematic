@@ -19,9 +19,8 @@ key detection
 
 required modules:
     
-pip install ipyfilechooser
 pip install librosa
-pip install soundfile    
+pip install soundfile  (dont need)   
 pip install pydub
 pip install pyloudnorm
 pip install git+https://github.com/RichardSmaldone/pychorus@master
@@ -43,7 +42,6 @@ import os
 
 from pydub import AudioSegment
 import pychorus as pyc
-import pandas as pd
 import matplotlib.pyplot as plt
 import pyloudnorm as pyln
 import random as rnd
@@ -102,6 +100,10 @@ song_file = os.path.basename(root.file)
 song_name = os.path.splitext(song_file)[0]
 output_file = os.path.dirname(root.file) + "/" + os.path.splitext(song_file)[0] + "_jingled.mp3"
 os.path.dirname(root.file)
+
+
+
+# be nice to remember the directory, so just wipe out chorus_start_1 & 2
 
 """v
 # To use a source directory rather than file dialog
@@ -225,6 +227,8 @@ songkey = pitches[adj_key]
 if third == 'minor':
     print(str.format('Adjusted to {} major',pitches[adj_key]))
 
+if adj_key > 6:
+    adj_key = adj_key-12
 
 
 # shift the pitch of the woodblocks so they're in key
@@ -239,8 +243,8 @@ if third == 'minor':
 # default key of C    
 # pitches[0] is C   
 
-handbell1 = librosa.effects.pitch_shift(handbell, sr, n_steps=adj_key-12, bins_per_octave=24) 
-handbell2 = librosa.effects.pitch_shift(handbell, sr, n_steps=adj_key-19, bins_per_octave=24) 
+handbell1 = librosa.effects.pitch_shift(handbell, sr, n_steps=adj_key, bins_per_octave=12) 
+handbell2 = librosa.effects.pitch_shift(handbell, sr, n_steps=adj_key-5, bins_per_octave=12) 
 
 
 #y_shifted = librosa.effects.pitch_shift(y, sr, n_steps=4, bins_per_octave=24)   
@@ -273,7 +277,7 @@ else:
 
 # if there's no chorus found at all, let's just pretend it's at the halfway mark.
 if chorus_start_1 is None:
-    chorus_start_1 = librosa.get_duration(xy)/2       
+    chorus_start_1 = librosa.get_duration(xy,sr)/2       
 
 print("Adding festive holiday cheer...")
     
