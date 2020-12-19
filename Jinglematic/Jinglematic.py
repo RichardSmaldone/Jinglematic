@@ -288,9 +288,9 @@ beat_frames = beat_frames - finetune[NumJingle]
 # delete any that are less than zero after shifting
 beat_frames = beat_frames[beat_frames > 0]
   
-if tempo <= 100: 
+if tempo <= 102: 
    include_upbeats = True
-   print("BPM <= 100, adding jingles on the upbeat")
+   print("BPM <= 102, adding jingles on the upbeat")
          
 if include_upbeats == True:
     upbeat_frames = (beat_frames[1:] + beat_frames[:-1]) / 2
@@ -396,11 +396,11 @@ handbell_sound = handbell1_sound + handbell2_sound
 # Combine all our ingredients together        
 mixed = xy + (
         beat_clicks / bellvol_adj) + (
-        clip_clops / (bellvol_adj * 2)) +  (
+        clip_clops / (bellvol_adj * 1.8)) +  (
         harp_sound / (bellvol_adj * 2)) + (
         whip_sound / bellvol_adj) + (
         hoho_sound/ bellvol_adj +
-        handbell_sound / (bellvol_adj * 10 )         
+        handbell_sound / (bellvol_adj * 8 )         
         ) 
 
 sf.write(output_file + ".wav", mixed, sr)
